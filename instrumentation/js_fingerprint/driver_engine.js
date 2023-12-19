@@ -3,7 +3,7 @@
 * This module is a part of cryptojacking library detection.
 */
 'use strinct'; 
-const crawler_unit = require('./driver');
+const crawler_unit = require('./driver_2');
 //the driver here loads a browser instance, allows the scanner to monitor the traffic, content, etc.
 const fs = require('fs');
 //Parsing the input argument
@@ -16,6 +16,28 @@ if (!input){
    process.exit(1);
 }
 
+const options = {}
+
+let url
+let arg
+
+const aliases = {
+  a: 'userAgent',
+  b: 'batchSize',
+  d: 'debug',
+  t: 'delay',
+  h: 'help',
+  D: 'maxDepth',
+  m: 'maxUrls',
+  p: 'probe',
+  P: 'pretty',
+  r: 'recursive',
+  w: 'maxWait',
+  n: 'noScripts',
+}
+
+
+
 var logged = `${input}\n`;
 fs.appendFileSync('./checked_websites.txt', logged);
 var input_options = {};
@@ -23,14 +45,23 @@ var agrument;
 
 while ( argument = arguments1.shift() ) {
   //console.log(argument);
-   var matches = /--([^=]+)=(.+)/.exec(argument);
+//    var matches = /--([^=]+)=(.+)/.exec(argument);
+    const matches = /^-?-([^=]+)(?:=(.+)?)?/.exec(argument);
    //console.log('we are here');
-   if (matches){
-       var key = matches[1].replace(/-\w/g, matches => matches[1].toUpperCase());
-       var value = matches[2];
-       input_options[key] = value;
-       console.log(key);
-   }
+    if (matches){
+    //    var key = matches[1].replace(/-\w/g, matches => matches[1].toUpperCase());
+        const key =
+        aliases[matches[1]] ||
+        matches[1].replace(/-\w/g, (_matches) => _matches[1].toUpperCase())
+        // var value = matches[2];
+        const value = matches[2]
+        ? matches[2]
+        : argument[0] && !argument[0].startsWith('-')
+        ? argument.shift()
+        : true
+        input_options[key] = value;
+        console.log(key);
+    }
 }
 
 const static_checker = new crawler_unit(input, input_options);

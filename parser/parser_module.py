@@ -20,7 +20,7 @@ import itertools
 import gzip
 import logging
 import re
-import urlparse
+import urllib.parse
 import csv
 
 
@@ -49,21 +49,23 @@ class CryptoDetect(object):
   
        
     def detecting_hashfunction_wasm(self,raw_events):
-        hash_function_sig = ["Cryptonight", "wasmwrapper", "neoscript","scrypt"]
+        hash_function_sig = ["Cryptonight", "wasmwrapper", "neoscript", "scrypt", "wasm"]
         try:
             for raw_event in raw_events:
                 if raw_event['cat'] == "disabled-by-default-v8.cpu_profiler":
-                    for arg, val in raw_event["args"].iteritems():
+                    for arg, val in raw_event["args"].items():
                         if arg == "data":
-                            for a,v in val.iteritems():
+                            for a,v in val.items():
                                 if isinstance(v, dict):
-                                    for s,p in v.iteritems():
+                                    for s,p in v.items():
                                         if s == "nodes":
-                                            for n,d in p[0].iteritems():
+                                            for n,d in p[0].items():
                                                 if n == "callFrame":
                                                     try:
-                                                       if d['url'] == "(wasm)":
-                                                            self.wasm = 1
+                                                    #    if d['url'] == "(wasm)":
+                                                        if d['url'].find("wasm") != -1 :
+                                                                # print("d['url']", str(d['url']))
+                                                                self.wasm = 1
                                                     except:
                                                         pass
                                                         
@@ -76,95 +78,121 @@ class CryptoDetect(object):
     def detecting_blob_socket(self, raw_events):
         try:
             for raw_event in raw_events:
-                  if raw_event['cat'] == 'devtools.timeline':
-                    for key, value in raw_event.iteritems():
+                if raw_event['cat'] == 'devtools.timeline':
+                    for key, value in raw_event.items():
+                        print(raw_event)
                         if key == 'args':
-                            for k,v in value.iteritems():
-                                for s,p in v.iteritems():
+                            if not isinstance(value, dict):
+                                print("Warning: 'value' is not a dictionary. It is:", type(value))
+                            for k, v in value.items():
+                                # if not isinstance(v, dict):
+                                #     print("Warning: 'v' is not a dictionary. It is:", type(v))
+                                # else:
+                                for s, p in v.items():
+                                    # if not isinstance(p, dict):
+                                    #     print(f"Processing: s = {s}, p = {p}")
+                                    # print(f"Processing: s = {s}, p = {p}")
                                     if s=="url":
                                         if p.startswith('blob:https://'):
                                             self.blob_url= p
-                                         
+                                        
                                         elif p.startswith('wss') or p.startswith('ws'):
                                             self.websocket_url = p
                                             break
-                    
+                
                         else:
-                            if key == 'name' and value =="FunctionCall":
-                                for key, value in raw_event["args"].iteritems():
+                            if key == 'name' or value =="FunctionCall":
+                            # if key == 'name':
+                                for key, value in raw_event["args"].items():
                                     if value['url'].startswith("blob:http"):
                                         self.blob_url= p
                                       
-                  else:
+                else:
                     continue
         except Exception as e: print(e)
 
     def message_loop(self, raw_events):
         try:
             for raw_event in raw_events:
-                if raw_event['cat'] == 'toplevel':
-
-                    for key, value in raw_event.iteritems():
+                # print('raw_event : ', raw_event)
+                if raw_event['cat'] == 'toplevel': 
+                    # print('raw_event : ', raw_event)
+                    for key, value in raw_event.items():
                         if key == "args":
-
-                            for a,b in value.iteritems():
-
-                                if b == "../../third_party/WebKit/Source/platform/scheduler/base/thread_controller_impl.cc":
-                                    
-                                    if raw_event['args']['src_func'] == 'ScheduleWork':
+                            for a,b in iter(value.items()):
+                                if not isinstance(b, dict):
+                                    # if b == "../../third_party/WebKit/Source/platform/scheduler/base/thread_controller_impl.cc": # Deprecated after 2017
+                                    if (b == "../../base/task/sequence_manager/thread_controller_impl.cc") or (str(b).find("thread_controller_impl.cc") != -1) \
+                                        or (b == "../../third_party/WebKit/Source/platform/scheduler/base/thread_controller_impl.cc") or (str(b).find("thread_") != -1) \
+                                        or (raw_event['args']['src_func'] == 'TryScheduleSequence') or (raw_event['args']['src_func'] == 'ScheduleWork'):
+                                        # if raw_event['args']['src_func'] == 'ScheduleWork':
+                                        # if (raw_event['args']['src_func'] == 'TryScheduleSequence') or (raw_event['args']['src_func'] == 'ScheduleWork'):
                                         try:
                                             self.messageloop = self.messageloop + raw_event['dur']
                                         except Exception as e:
                                             logging.error(e)
 
-                        if raw_event['name'] == "TaskQueueManager::ProcessTaskFromWorkQueue":
-                            if raw_event['args']['src_func'] == "PostMessageToWorkerGlobalScope":
+                        # if raw_event['name'] == "TaskQueueManager::ProcessTaskFromWorkQueue":
+                        if (raw_event['name'] == "RunTask") or (raw_event['name'] == "ThreadPool_RunTask"):
+                            # if raw_event['args']['src_func'] == "PostMessageToWorkerGlobalScope":
+                            if raw_event['args']['src_func'] == "PostDelayedTask":
                                 try:
-                                    self.postmessage = self.postmessage + raw_event['dur']           
+                                    self.postmessage = self.postmessage + raw_event['dur']
                                 except Exception as e:
                                     logging.error(e)
                           
         except Exception as e: print(e)
 
-    def parallel_tasks(self,raw_events):
+    def parallel_tasks(self, raw_events):
         tid = {}
         try:
             for raw_event in raw_events:
                 if raw_event['cat'] == 'devtools.timeline':
-                    for key, value in raw_event.iteritems():
+                    for key, value in raw_event.items():
+                        # if key == 'args':
                         if key == 'args':
-                            for k,v in value.iteritems():
-                                for s,p in v.iteritems():
-                                    if s == 'functionName':
-                                        if raw_event['tid'] not in tid:
-                                            tid[raw_event['tid']]= [p]   
-                                        else:
-                                            if p not in tid[raw_event['tid']]:
-                                                tid[raw_event['tid']].append(p)
-
-                             
-            listed_values = [item for sublist in tid.values() for item in sublist]
+                            if not isinstance(value, dict):
+                                print("Warning: 'value' is not a dictionary. It is:", type(value))
+                            for k, v in iter(value.items()):
+                                # if not isinstance(v, dict):
+                                #     print("Warning: 'v' is not a dictionary. It is:", type(v))
+                                # else:
+                                if isinstance(v, dict):
+                                    for s, p in iter(v.items()):
+                                        # if not isinstance(p, dict):
+                                        # print(f"Processing: s = {s}, p = {p}")
+                                        if s == 'functionName' and not isinstance(p, dict): # correct
+                                            if raw_event['tid'] not in tid:
+                                                print("raw_event['tid']", raw_event['tid'])
+                                                tid[raw_event['tid']] = [p]
+                                            else:
+                                                if p not in tid[raw_event['tid']]:
+                                                    tid[raw_event['tid']].append(p)
+            listed_values = [item for sublist in list(tid.values()) for item in sublist]
+            print("listed_values:", listed_values)
             duplicates = []
             for i in listed_values:
                 if listed_values.count(i) > 1:
                     duplicates.append(i)
+            print("dup:", duplicates)
             if duplicates:
                 self.parallel_functions = ", ".join(str(e) for e in set(duplicates))
-            
-        
-        except Exception as e: print(e)   
-    
+
+        except Exception as e:
+            print("Error occurred:", e)
+
     def workers(self,raw_events):
         try:
             worker_count =0
             workers_id = []
             parallel_worker = {}
             for raw_event in raw_events:
-                if raw_event['cat'] == '__metadata':
-                    for key, value in raw_event.iteritems():
+                if raw_event['cat'] == '__metadata': # correct
+                    for key, value in raw_event.items():
                         if key == 'args':
-                            for k,v in value.iteritems():
-                                if v =="DedicatedWorker Thread":
+                            for k,v in iter(value.items()):
+                                print('value :', v)
+                                if (v =="DedicatedWorker Thread") or (v == "DedicatedWorker thread"):
                                     workers_id.append(raw_event['tid'])
                                     parallel_worker[raw_event['tid']] = raw_event['pid']     
 
@@ -177,7 +205,7 @@ class CryptoDetect(object):
    
     def path_creation(self, file_path):
         self.devtools_file = file_path
-        print ("[+] parsing %s"%self.devtools_file)
+        print(("[+] parsing %s"%self.devtools_file))
         f_in = open("./"+self.target_folder+"/"+self.devtools_file.split(".devtools.trace")[0]+"/"+self.devtools_file,'r')
         #f_in = open("./"+self.target_folder+"/"+self.devtools_file,'r')
         return f_in
@@ -198,7 +226,7 @@ class CryptoDetect(object):
             features.append(1)
         else:
             features.append(0)
-        print "[+] Corresponding features: %s"%(features)
+        print("[+] Corresponding features: %s"%(features))
         return features
 
     def output_file(self,vectors):
@@ -283,7 +311,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-

@@ -2,11 +2,18 @@
   "name": "Outguard",
   "version": "0.0.1",
   "description": "An instrumention layer to collect cryptojacking traits",
-  "author": "Amin Kharraz", 
+  "author": "Amin Kharraz",
   "dependencies": {
+    "axios": "^1.6.2",
     "chrome-launcher": "^0.3.2",
-    "chrome-remote-interface": "^0.24.2",
+    "chrome-remote-interface": "^0.24.5",
     "devtools-timeline-model": "^1.0",
-    "httpster": "^1.0.3"
+    "httpster": "^1.0.3",
+    "package-lock.json": "^1.0.0",
+    "package.json": "^2.0.1",
+    "puppeteer": "^21.5.2",
+    "request": "^2.88.2",
+    "superagent": "^8.1.2",
+    "zombie": "^6.1.4"
   }
 }

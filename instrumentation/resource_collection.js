@@ -14,7 +14,9 @@ The code basically extracts about:
 const Chrome = require('chrome-remote-interface');
 const chrome_launcher = require('chrome-launcher');
 const fs = require('fs');
-const request = require('request');
+// const request = require('request');
+// const request = require('axios');
+const request = require('superagent');
 const artifical_delay = n => new Promise(resolve => setTimeout(resolve, n));
 const args = process.argv.slice(2);
 
@@ -30,9 +32,9 @@ var TRACE_CATEGORIES = ["-*", "devtools.timeline",
 
 var rawEvents = [];
 
-const trace_path = 'PATH_1';
-const static_script = 'PATH_2';
-const dynamic_script = 'PATH_3';
+const trace_path = '/Users/timkh/webassembl/outguard/parser/wasm_site/trace/';
+const static_script = '/Users/timkh/webassembl/outguard/parser/wasm_site/static/';
+const dynamic_script = '/Users/timkh/webassembl/outguard/parser/wasm_site/dynamic/';
 
 const url = args.shift() || '';
 console.log("visited: ", url);
@@ -47,13 +49,16 @@ inputs = `{${url}\n}`;
 fs.appendFileSync('./crawled_sites.txt', inputs);
 
 Chrome(function(chrome){
+
   with(chrome) {
   const network_trace = generateFilename(url);
   Page.enable();
   Network.enable();
   Profiler.enable();
   Debugger.enable();
- 
+
+  console.log("chrome enabled");
+  
   if (!fs.existsSync(static_script+network_trace)){
 
       fs.mkdirSync(static_script+network_trace);
@@ -84,12 +89,30 @@ Chrome(function(chrome){
   
   Network.requestWillBeSent((params) =>{
 
+      // request(params.request.url, function(error, response, body){
+      // let json = JSON.stringify(body);
+      // fs.writeFile(dynamic_script + network_trace + "/" + params.requestId,json, (err) =>{
+      //    if (err) throw err;
+      // }); })
       request(params.request.url, function(error, response, body){
-      let json = JSON.stringify(body);
-      fs.writeFile(dynamic_script + network_trace + "/" + params.requestId,json, (err) =>{
-         if (err) throw err;
-      }); })
-
+        if (error) {
+            console.error("Error in request:", error);
+            return;
+        }
+    
+        if (!body) {
+            console.log("No body received for URL:", params.request.url);
+            return;
+        }
+    
+        let json = JSON.stringify(body);
+        fs.writeFile(dynamic_script + network_trace + "/" + params.requestId, json, (err) =>{
+            if (err) {
+                console.error("Error writing file:", err);
+            }
+        });
+    });
+    
       event_trace = JSON.stringify(params, null, 2);
       fs.appendFileSync(trace_path+network_trace+"/"+ network_trace +'.reqtrace', event_trace);
       });
@@ -122,7 +145,7 @@ Chrome(function(chrome){
      });
  
   function generateFilename(address){
-  const dummy_value = address.replace('http://', '');
+  const dummy_value = address.replace('https://', '');
   const fname = `${dummy_value}-${Date.now()}`;
   return fname
    }

@@ -1,6 +1,6 @@
 'use strict';
 
-const Wappalyzer = require('./wappalyzer');
+const Wappalyzer = require('./wappalyzer_2');
 const request = require('request');
 const url = require('url');
 const fs = require('fs');
@@ -8,7 +8,7 @@ const Browser = require('zombie');
 const Timer = require('timers');
 const setIntervalmine = Timer.setInterval;
 
-const json = JSON.parse(fs.readFileSync(__dirname + '/apps.json'));
+const json = JSON.parse(fs.readFileSync(__dirname + '/technologies.json'));
 
 const extensions = /^([^.]+$|\.(asp|aspx|cgi|htm|html|jsp|php)$)/;
 
